@@ -128,6 +128,13 @@ def test_meta_route_requires_auth(mock_get):
     assert response.headers.get(PROXY_ERROR_HEADER) == "proxy"
 
 
+def test_health_route_does_not_require_auth():
+    response = client.get("/healthz")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
 def mock_html_response():
     return httpx.Response(
         status_code=200,

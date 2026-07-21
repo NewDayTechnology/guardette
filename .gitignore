@@ -204,3 +204,10 @@ terraform.rc
 # Guardette specific
 .guardette/
 **/policygen.config.json
+/deploy/cloudflare/node_modules/
+/deploy/cloudflare/worker-configuration.d.ts
+/deploy/cloudflare/.dev.vars
+/deploy/cloudflare/wrangler.jsonc
+/deploy/cloudflare/wrangler.jsonc.dev
+/deploy/cloudflare/wrangler.jsonc.production
+**/.wrangler/

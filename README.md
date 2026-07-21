@@ -4,7 +4,7 @@ Guardette is a **redacting proxy layer** that sits between the REST APIs of your
 
 ## Features
 
-- **Flexible Deployment**: Run as a standalone webservice or deploy as an AWS Lambda function.
+- **Flexible Deployment**: Run as a standalone webservice, deploy as an AWS Lambda function, or run behind a Cloudflare Worker and Container.
 - **Redaction and Filtering**: Define precise rules to redact sensitive information or filter specific data fields.
 - **Granular Access Control**: Allow or restrict access to specific parts of your APIs based on defined policies.
 - **Authentication Support**: Integrate with various authentication mechanisms, including AWS Secrets Manager for secure credential management.
@@ -114,6 +114,17 @@ docker build -f Dockerfile.awslambda -t guardette-lambda .
 ```
 
 See [terraform/aws/README.md](terraform/aws/README.md) for full deployment instructions.
+
+## Deploying to Cloudflare Containers
+
+The Cloudflare adapter runs the same Guardette image behind a private
+Cloudflare Worker and Durable Object Container. It supports Cloudflare
+Secrets Store bindings for production credentials, retains Worker Secrets as a
+fallback, enables Workers Logs with structured lifecycle/request events, and
+uses `/healthz` for container readiness.
+
+See [deploy/cloudflare/README.md](deploy/cloudflare/README.md) for setup,
+policy promotion, secret names, and deployment commands.
 
 ## Authentication Configuration
 

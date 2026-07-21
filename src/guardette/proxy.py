@@ -91,7 +91,7 @@ def guardette_route():
                 extra={
                     "correlation_id": correlation_id,
                     "method": request.method,
-                    "url": str(request.url),
+                    "path": request.url.path,
                     "client_host": request.client.host if request.client else "unknown",
                     "proxy_host": request.headers.get(PROXY_HOST_HEADER, "unknown"),
                 },
@@ -207,6 +207,9 @@ class Guardette:
             status_code=200,
         )
 
+    async def _health_route(self):
+        return JSONResponse(content={"status": "ok"})
+
     @guardette_route()
     async def _proxy_route(self, request: Request):
         await self._validate_client_secret(request)
@@ -297,6 +300,7 @@ class Guardette:
 
     def to_fastapi(self, app: FastAPI):
         app.api_route("/_guardette/meta", methods=["GET"])(self._meta_route)
+        app.api_route("/healthz", methods=["GET"], include_in_schema=False)(self._health_route)
         app.api_route(
             "/{path:path}",
             methods=["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"],

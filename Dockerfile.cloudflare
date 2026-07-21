@@ -1,0 +1,34 @@
+FROM python:3.13-slim
+
+ARG POETRY_VERSION=2.4.1
+
+ENV LANG=C.UTF-8 \
+    POETRY_NO_INTERACTION=1 \
+    POETRY_VIRTUALENVS_CREATE=true \
+    POETRY_VIRTUALENVS_IN_PROJECT=true \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir "poetry==${POETRY_VERSION}"
+
+COPY pyproject.toml poetry.lock /app/
+COPY src/guardette /app/src/guardette
+RUN poetry install --only main --no-ansi
+
+COPY main.py /app/
+COPY .guardette/policy.yml /app/config/policy.yml
+
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONPATH=/app/src \
+    GUARDETTE_POLICY_PATH=/app/config/policy.yml \
+    HOST=0.0.0.0 \
+    PORT=8000
+
+RUN chown -R nobody:nogroup /app
+USER nobody
+
+EXPOSE 8000
+ENTRYPOINT ["python"]
+CMD ["-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

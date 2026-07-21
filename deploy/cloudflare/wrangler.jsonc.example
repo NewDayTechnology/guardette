@@ -1,0 +1,50 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "guardette",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-18",
+  "workers_dev": true,
+  "containers": [
+    {
+      "class_name": "GuardetteContainer",
+      "image": "../../Dockerfile.cloudflare",
+      "image_build_context": "../../",
+      "max_instances": 1
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "GUARDETTE_CONTAINER",
+        "class_name": "GuardetteContainer"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["GuardetteContainer"]
+    }
+  ],
+  "vars": {
+    "LOG_LEVEL": "INFO",
+    "SECRET_MANAGER": "default",
+    "AUTH_BASIC_AUTH_JIRA_USERNAME": "<JIRA_USERNAME>"
+  },
+  "secrets_store_secrets": [
+    {
+      "binding": "SECRET_STORE_CLIENT_SECRET",
+      "store_id": "<STORE_ID>",
+      "secret_name": "CLIENT_SECRET"
+    },
+    {
+      "binding": "SECRET_STORE_AUTH_BASIC_AUTH_JIRA_PASSWORD",
+      "store_id": "<STORE_ID>",
+      "secret_name": "AUTH_BASIC_AUTH_JIRA_PASSWORD"
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}

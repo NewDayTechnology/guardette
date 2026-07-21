@@ -1,0 +1,15 @@
+# Keep the Cloudflare build context limited to the production image inputs.
+# This excludes VCS metadata, local environments, caches, secrets, tests,
+# generated artifacts, and unrelated application/deployment outputs.
+*
+
+!Dockerfile
+!Dockerfile.cloudflare
+!pyproject.toml
+!poetry.lock
+!main.py
+!.guardette/
+!.guardette/policy.yml
+!src/
+!src/guardette/
+!src/guardette/**

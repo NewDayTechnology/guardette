@@ -115,6 +115,8 @@ curl -H "Authorization: secret" -H "X-Guardette-Host: hacker-news.firebaseio.com
 
 When enabled, request events include method, normalized route, status, duration, the `request_id` event field, and a small allowlist of safe headers. The same opaque ID is returned in the `X-Guardette-Request-Id` response header. Request/response bodies, query strings, authorization headers, cookies, tokens, API keys, and secrets are not logged. Metric events are emitted as structured JSON to `stdout`; native Cloudflare or OTLP metric export is a deployment concern.
 
+Authentication metrics distinguish `failure_class=client` for credentials rejected by Guardette from `failure_class=upstream` for target-service credentials rejected by Jira or another configured upstream. Upstream 401/403 responses are recorded with `outcome=auth_failure` in `guardette_upstream_requests_total`.
+
 ### Pseudonymization algorithms
 
 `pseudonymize_email` remains the same policy action. Select its digest construction with `PSEUDONYMIZE_ALGORITHM`:

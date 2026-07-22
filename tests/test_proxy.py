@@ -36,6 +36,27 @@ def test_yc(mock_get):
     assert response.json()["title"] == guardette.config.REDACT_TOKEN
 
 
+def test_proxy_drops_accept_encoding_before_upstream():
+    upstream_response = httpx.Response(status_code=200, json={"title": "example"})
+
+    with (
+        patch("httpx.AsyncClient.get", return_value=upstream_response) as upstream_get,
+        patch("guardette.secrets.ConfigSecretsManager.get", side_effect=get_secret),
+    ):
+        response = client.get(
+            "/v0/item/8863.json",
+            headers={
+                PROXY_HOST_HEADER: "hacker-news.firebaseio.com",
+                "Authorization": test_client_secret,
+                "Accept-Encoding": "br",
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    forwarded_headers = upstream_get.call_args.kwargs["headers"]
+    assert forwarded_headers.get("accept-encoding") is None
+
+
 @patch("guardette.secrets.ConfigSecretsManager.get", side_effect=GuardetteException("Secret retrieval failed"))
 def test_internal_error(mock_get):
     response = client.get(

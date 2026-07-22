@@ -42,6 +42,7 @@ STRIP_REQUEST_HEADERS = {
     "connection",
     "content-length",
     "transfer-encoding",
+    "accept-encoding",
 }
 
 STRIP_RESPONSE_HEADERS = {

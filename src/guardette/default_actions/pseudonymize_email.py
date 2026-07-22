@@ -11,7 +11,8 @@ _HMAC_KEY_MIN_BYTES = hashlib.sha256().digest_size
 
 
 class _EmailDigestStrategy(Protocol):
-    def digest(self, part: str, value: str) -> bytes: ...
+    def digest(self, part: str, value: str) -> bytes:
+        raise NotImplementedError
 
 
 class _LegacySaltedSha256:

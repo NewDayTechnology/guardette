@@ -16,6 +16,7 @@ from guardette.constants import PROXY_ERROR_HEADER, PROXY_HOST_HEADER
 from guardette.datastructures import ProxyRequest, ProxyResponse
 from guardette.exceptions import (
     AuthException,
+    AuthHandlerAuthException,
     ConfigurationException,
     GuardetteException,
     HttpMethodNotSupportedException,
@@ -55,6 +56,7 @@ STRIP_RESPONSE_HEADERS = {
 
 logger = logging.getLogger("guardette")
 
+_UPSTREAM_AUTH_FAILURE_STATUS_CODES = frozenset({401, 403})
 
 _EXCEPTION_RESPONSES: dict[type[GuardetteException], tuple[int, str, str]] = {
     # exception class -> (status_code, response_message, log_message)
@@ -209,6 +211,10 @@ class Guardette:
         )
         try:
             proxy_request = await proxy_transformer.transform_request(request)
+        except AuthHandlerAuthException as e:
+            _record_auth_failure(request, "upstream")
+            _record_upstream(request, "auth_failure", None)
+            raise TransformationException("Error authenticating to upstream service.") from e
         except Exception as e:
             raise TransformationException(f"Error transforming request: {e!s}") from e
 
@@ -302,15 +308,18 @@ class Guardette:
         )(self._proxy_route)
 
 
-def _record_auth_failure(request: Request) -> None:
+def _record_auth_failure(request: Request, failure_class: str = "client") -> None:
     observability = getattr(request.app.state, "observability", None)
     if observability is not None:
-        observability.metrics.record_auth_failure("client")
+        observability.metrics.record_auth_failure(failure_class)
 
 
 def _record_upstream(request: Request, outcome: str, status_code: int | None) -> None:
     observability = getattr(request.app.state, "observability", None)
     if observability is not None:
+        if status_code in _UPSTREAM_AUTH_FAILURE_STATUS_CODES:
+            _record_auth_failure(request, "upstream")
+            outcome = "auth_failure"
         observability.metrics.record_upstream(outcome, status_code)
 
 

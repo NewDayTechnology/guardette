@@ -1,5 +1,6 @@
 import json
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import Mock, call, patch
 
 import httpx
 import pytest
@@ -9,10 +10,11 @@ from fastapi.testclient import TestClient
 from guardette import Guardette
 from guardette.constants import PROXY_ERROR_HEADER, PROXY_HOST_HEADER
 from guardette.datastructures import ProxyRequest, ProxyResponse
-from guardette.exceptions import GuardetteException
+from guardette.exceptions import AuthHandlerAuthException, GuardetteException
 from guardette.logging import setup_logging
 from guardette.observability import configure_observability
 from guardette.observability.config import ObservabilityConfig
+from guardette.proxy import _record_auth_failure, _record_upstream
 
 app = FastAPI()
 
@@ -283,6 +285,44 @@ def test_upstream_timeout_records_metric(metrics_client, capsys):
     assert events[0]["status_class"] == "none"
     assert events[0]["outcome"] in {"success", "error", "timeout"}
     assert events[0]["status_class"] in {"2xx", "4xx", "5xx", "none"}
+
+
+def test_auth_failure_metrics_distinguish_client_and_upstream():
+    metrics = Mock()
+    request = SimpleNamespace(
+        app=SimpleNamespace(state=SimpleNamespace(observability=SimpleNamespace(metrics=metrics))),
+    )
+
+    _record_auth_failure(request)
+    _record_upstream(request, "success", 401)
+
+    assert metrics.record_auth_failure.call_args_list == [call("client"), call("upstream")]
+    metrics.record_upstream.assert_called_once_with("auth_failure", 401)
+
+
+@patch(
+    "guardette.proxy.ProxyTransformer.transform_request",
+    side_effect=AuthHandlerAuthException("Target credentials rejected."),
+)
+@patch("guardette.secrets.ConfigSecretsManager.get", side_effect=get_secret)
+def test_target_auth_handler_failure_is_classified_as_upstream(mock_get, mock_transform_request):
+    metrics = Mock()
+    previous_metrics = app.state.observability.metrics
+    app.state.observability.metrics = metrics
+    try:
+        response = client.get(
+            "/v0/item/8863.json",
+            headers={
+                PROXY_HOST_HEADER: "hacker-news.firebaseio.com",
+                "Authorization": test_client_secret,
+            },
+        )
+    finally:
+        app.state.observability.metrics = previous_metrics
+
+    assert response.status_code == 500
+    metrics.record_auth_failure.assert_called_once_with("upstream")
+    metrics.record_upstream.assert_called_once_with("auth_failure", None)
 
 
 def mock_html_response():

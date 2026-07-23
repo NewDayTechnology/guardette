@@ -102,7 +102,9 @@ curl -H "Authorization: secret" -H "X-Guardette-Host: hacker-news.firebaseio.com
 | `SECRET_MANAGER` | No | `default` | Secret manager backend (`default` or `aws_secret_manager`) |
 | `PROXY_CLIENT_TIMEOUT_SECS` | No | `60` | Proxy request timeout in seconds |
 | `SECRET_MANAGER_CACHE_TTL_SECS` | No | `120` | Secret cache TTL in seconds |
-| `PSEUDONYMIZE_SALT` | No | `""` | Salt for email pseudonymization |
+| `PSEUDONYMIZE_ALGORITHM` | No | `sha256` | Pseudonymization algorithm: `sha256` (legacy) or `hmac-sha256` |
+| `PSEUDONYMIZE_SALT` | Conditional | `""` | Non-empty secret input for legacy `sha256`; new deployments should use at least 32 random bytes |
+| `HMAC_KEY` | Conditional | `""` | Secret HMAC key for `hmac-sha256`; at least 32 bytes is enforced |
 | `PSEUDONYMIZE_EMAIL_DOMAINS_ALLOWLIST` | No | `""` | Comma-separated domain allowlist |
 | `OBS_ENABLED` | No | `false` | Master switch for application observability |
 | `OBS_REQUEST_LOGGING_ENABLED` | No | `false` | Opt-in safe request/response JSON logging |
@@ -112,6 +114,31 @@ curl -H "Authorization: secret" -H "X-Guardette-Host: hacker-news.firebaseio.com
 | `ENVIRONMENT` | No | `unknown` | Deployment environment in observability events |
 
 When enabled, request events include method, normalized route, status, duration, the `request_id` event field, and a small allowlist of safe headers. The same opaque ID is returned in the `X-Guardette-Request-Id` response header. Request/response bodies, query strings, authorization headers, cookies, tokens, API keys, and secrets are not logged. Metric events are emitted as structured JSON to `stdout`; native Cloudflare or OTLP metric export is a deployment concern.
+
+Authentication metrics distinguish `failure_class=client` for credentials rejected by Guardette from `failure_class=upstream` for target-service credentials rejected by Jira or another configured upstream. Upstream 401/403 responses are recorded with `outcome=auth_failure` in `guardette_upstream_requests_total`.
+
+### Pseudonymization algorithms
+
+`pseudonymize_email` remains the same policy action. Select its digest construction with `PSEUDONYMIZE_ALGORITHM`:
+
+| Algorithm | Construction | Secret variable | Characteristics |
+|---|---|---|---|
+| `sha256` | `SHA-256(value + PSEUDONYMIZE_SALT)` | `PSEUDONYMIZE_SALT` | Legacy default for compatibility; deterministic and non-reversible; not a standard keyed construction |
+| `hmac-sha256` | `HMAC-SHA-256(HMAC_KEY, context + value)` | `HMAC_KEY` | Recommended; deterministic and non-reversible; uses a standard keyed construction |
+
+Both modes preserve stable correlation and the existing `u-{hash}@d-{hash}.invalid` output format. Neither mode is encryption or reversible pseudonymization. Switching algorithms changes all generated pseudonyms.
+
+For new deployments, use at least 32 bytes of high-entropy material for either secret. HMAC mode enforces this minimum; legacy `sha256` accepts existing non-empty salts for compatibility. Do not use a password or human-readable value. Generate a safe key with OpenSSL:
+
+```bash
+# Recommended for environment variables and .env files:
+openssl rand -hex 32
+
+# Alternatively, use Base64:
+openssl rand -base64 32 | tr -d '\n'
+```
+
+Copy the generated value into `HMAC_KEY` when using `hmac-sha256`, or into `PSEUDONYMIZE_SALT` when using legacy `sha256`. Guardette treats the generated hex or Base64 text as the key directly; do not manually decode it. Keep the value out of source control and logs. When using AWS Secrets Manager, the environment variable contains the secret identifier and the stored secret value must meet the same requirement.
 
 ## Deploying to AWS Lambda
 
@@ -181,6 +208,8 @@ SECRET_MANAGER=aws_secret_manager
 AUTH_BASIC_AUTH_JIRA_USERNAME=arn:aws:secretsmanager:us-west-2:123456789012:secret:JIRA_USERNAME
 AUTH_BASIC_AUTH_JIRA_PASSWORD=arn:aws:secretsmanager:us-west-2:123456789012:secret:JIRA_PASSWORD
 ```
+
+For HMAC mode, set `PSEUDONYMIZE_ALGORITHM=hmac-sha256` and provide an ARN for `HMAC_KEY` instead of `PSEUDONYMIZE_SALT`.
 
 Best for: AWS Lambda deployments.
 

@@ -1,0 +1,18 @@
+# Local-only additions, merged automatically by `docker compose up`.
+# Never pass this file to `az containerapp compose create`.
+services:
+  guardette:
+    build: .
+    volumes:
+      - ./.guardette/policy.yml:/app/config/policy.yml:ro
+    env_file:
+      - path: .env
+        required: false
+
+  presidio-analyzer:
+    ports:
+      - "5002:3000"
+
+  presidio-anonymizer:
+    ports:
+      - "5001:3000"

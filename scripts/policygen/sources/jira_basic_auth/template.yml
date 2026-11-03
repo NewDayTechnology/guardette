@@ -2,34 +2,174 @@ source:
   host: {{ config.jira_domain }}
   auth: basic_auth:jira
   rules:
+    # MVP: only the single-issue route is exposed by default. Set "include_extended_routes": true
+    # in this source's policygen config to add the search, board and metadata routes below.
+    # Presidio redacts PII; redact_regex catches developer secrets Presidio does not.
+    - route: "GET /rest/api/3/issue/{issueIdOrKey}"
+      actions:
+      # versionedRepresentations repeats field values as {"1": value}, which the text actions skip.
+      - kind: nullify
+        json_paths:
+        - $.versionedRepresentations
+      - kind: presidio_anonymize
+        json_paths:
+        - $..summary
+        - $..description
+        - $.fields.comment.comments[*].body
+        - $.renderedFields.comment.comments[*].body
+        - $.fields.worklog.worklogs[*].comment
+        - $.renderedFields.worklog.worklogs[*].comment
+        - '$.changelog.histories[*].items[*].fromString'
+        - '$.changelog.histories[*].items[*].toString'
+        adf_paths:
+        - $.fields.description
+        - $.fields.comment.comments[*].body
+        - $.fields.worklog.worklogs[*].comment
+      - kind: redact_regex
+        json_paths:
+        - $..summary
+        - $..description
+        - $.fields.comment.comments[*].body
+        - $.renderedFields.comment.comments[*].body
+        - $.fields.worklog.worklogs[*].comment
+        - $.renderedFields.worklog.worklogs[*].comment
+        - '$.changelog.histories[*].items[*].fromString'
+        - '$.changelog.histories[*].items[*].toString'
+        - $.fields.description..text
+        - $.fields.comment.comments[*].body..text
+        - $.fields.worklog.worklogs[*].comment..text
+        # Verbose regex (x flag): whitespace is ignored and `#` starts a comment, so
+        # literal spaces and hashes are escaped (`\ `, `\#`). Reused below via *jira_secret_regex.
+        # Organisation-specific keywords come from "redact_keyword_patterns" (a list of regex
+        # alternatives in the same verbose syntax) in this source's policygen config, never from this file.
+        regex_pattern: &jira_secret_regex |-
+          (?sx)
+          (?:
+              \bgh[pousr]_[A-Za-z0-9_]{20,}\b                                    # GitHub token (ghp_/gho_/ghu_/ghs_/ghr_)
+            | \bgithub_pat_[A-Za-z0-9_]{20,}\b                                  # GitHub fine-grained PAT
+            | \bglpat-[A-Za-z0-9_-]{20,}\b                                      # GitLab PAT
+            | \bxox[baprs]-[A-Za-z0-9-]{20,}\b                                  # Slack token
+            | \b(?:AKIA|ASIA)[0-9A-Z]{16}\b                                     # AWS access key ID
+            | \beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b   # JWT
+            | \bBearer\s+[A-Za-z0-9._~+/=-]{16,}                                # Bearer token
+            | (?:api[_ -]?key|access[_ -]?key|secret[_ -]?key|client[_ -]?secret)
+              \s*[:=]\s*[A-Za-z0-9_./+=:-]{16,}                                 # key/secret assignment
+            | (?<!\d)
+              (?:4\d{3}|5[1-5]\d{2}|2(?:2[2-9]\d|[3-6]\d{2}|7[01]\d|720)|3[47]\d{2}|6(?:011|5\d{2}))
+              [ -]?\d{4}[ -]?\d{4}[ -]?\d{3,4}
+              (?!\d)                                                            # card number (Visa/MC/Amex/Discover)
+            | -----BEGIN\ (?:RSA\ |EC\ |OPENSSH\ |DSA\ )?PRIVATE\ KEY-----
+              .*?
+              -----END\ (?:RSA\ |EC\ |OPENSSH\ |DSA\ )?PRIVATE\ KEY-----       # PEM private key block
+{%- for keyword_pattern in config.redact_keyword_patterns | default([]) %}
+            | {{ keyword_pattern }}
+{%- endfor %}
+          )
+{%- if config.include_extended_routes %}
     - route: "GET /rest/api/3/search"
       actions:
       - kind: nullify
         json_paths:
-        - '$.issues[*].changelog.histories[*].items[?(@.field = "summary")].fromString'
-        - '$.issues[*].changelog.histories[*].items[?(@.field = "summary")].toString'
-        - '$.issues[*].changelog.histories[*].items[?(@.field = "description")].fromString'
-        - '$.issues[*].changelog.histories[*].items[?(@.field = "description")].toString'
+        - $.issues[*].versionedRepresentations
+      - kind: presidio_anonymize
+        json_paths:
+        - $..summary
+        - $..description
+        - $.issues[*].fields.comment.comments[*].body
+        - $.issues[*].renderedFields.comment.comments[*].body
         - $.issues[*].fields.worklog.worklogs[*].comment
         - $.issues[*].renderedFields.worklog.worklogs[*].comment
-        - $.issues[*].versionedRepresentations
-        - $..description
+        - '$.issues[*].changelog.histories[*].items[*].fromString'
+        - '$.issues[*].changelog.histories[*].items[*].toString'
+        adf_paths:
+        - $.issues[*].fields.description
+        - $.issues[*].fields.comment.comments[*].body
+        - $.issues[*].fields.worklog.worklogs[*].comment
       - kind: redact_regex
         json_paths:
         - $..summary
-        # redact words 11 chars or longer, words that are numbers and dashes greather than 4 chars, and emails
-        regex_pattern: '\b(\w{11,}|[\d-]{5,}|\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b)\b'
+        - $..description
+        - $.issues[*].fields.comment.comments[*].body
+        - $.issues[*].renderedFields.comment.comments[*].body
+        - $.issues[*].fields.worklog.worklogs[*].comment
+        - $.issues[*].renderedFields.worklog.worklogs[*].comment
+        - '$.issues[*].changelog.histories[*].items[*].fromString'
+        - '$.issues[*].changelog.histories[*].items[*].toString'
+        - $.issues[*].fields.description..text
+        - $.issues[*].fields.comment.comments[*].body..text
+        - $.issues[*].fields.worklog.worklogs[*].comment..text
+        regex_pattern: *jira_secret_regex
+    # --- Migration of removed GET /rest/api/3/search (Atlassian CHANGE-2046) ---
+    # Same response shape as the old search route (issues[*] wrapper). Actions
+    # mirror the search route above; changelog paths are harmless no-ops here
+    # because /search/jql does not return changelog.
+    - route: "GET /rest/api/3/search/jql"
+      actions:
+      - kind: nullify
+        json_paths:
+        - $.issues[*].versionedRepresentations
+      - kind: presidio_anonymize
+        json_paths:
+        - $..summary
+        - $..description
+        - $.issues[*].fields.comment.comments[*].body
+        - $.issues[*].renderedFields.comment.comments[*].body
+        - $.issues[*].fields.worklog.worklogs[*].comment
+        - $.issues[*].renderedFields.worklog.worklogs[*].comment
+        - '$.issues[*].changelog.histories[*].items[*].fromString'
+        - '$.issues[*].changelog.histories[*].items[*].toString'
+        adf_paths:
+        - $.issues[*].fields.description
+        - $.issues[*].fields.comment.comments[*].body
+        - $.issues[*].fields.worklog.worklogs[*].comment
+      - kind: redact_regex
+        json_paths:
+        - $..summary
+        - $..description
+        - $.issues[*].fields.comment.comments[*].body
+        - $.issues[*].renderedFields.comment.comments[*].body
+        - $.issues[*].fields.worklog.worklogs[*].comment
+        - $.issues[*].renderedFields.worklog.worklogs[*].comment
+        - '$.issues[*].changelog.histories[*].items[*].fromString'
+        - '$.issues[*].changelog.histories[*].items[*].toString'
+        - $.issues[*].fields.description..text
+        - $.issues[*].fields.comment.comments[*].body..text
+        - $.issues[*].fields.worklog.worklogs[*].comment..text
+        regex_pattern: *jira_secret_regex
     - route: "GET /rest/agile/1.0/board"
     - route: "GET /rest/agile/1.0/board/{boardId}/issue"
       actions:
       - kind: nullify
         json_paths:
-        - $.issues[*].changelog
-        - $.issues[*].fields.worklog
-        - $.issues[*].renderedFields
         - $.issues[*].versionedRepresentations
+      - kind: presidio_anonymize
+        json_paths:
         - $..summary
         - $..description
+        - $.issues[*].fields.comment.comments[*].body
+        - $.issues[*].renderedFields.comment.comments[*].body
+        - $.issues[*].fields.worklog.worklogs[*].comment
+        - $.issues[*].renderedFields.worklog.worklogs[*].comment
+        - '$.issues[*].changelog.histories[*].items[*].fromString'
+        - '$.issues[*].changelog.histories[*].items[*].toString'
+        adf_paths:
+        - $.issues[*].fields.description
+        - $.issues[*].fields.comment.comments[*].body
+        - $.issues[*].fields.worklog.worklogs[*].comment
+      - kind: redact_regex
+        json_paths:
+        - $..summary
+        - $..description
+        - $.issues[*].fields.comment.comments[*].body
+        - $.issues[*].renderedFields.comment.comments[*].body
+        - $.issues[*].fields.worklog.worklogs[*].comment
+        - $.issues[*].renderedFields.worklog.worklogs[*].comment
+        - '$.issues[*].changelog.histories[*].items[*].fromString'
+        - '$.issues[*].changelog.histories[*].items[*].toString'
+        - $.issues[*].fields.description..text
+        - $.issues[*].fields.comment.comments[*].body..text
+        - $.issues[*].fields.worklog.worklogs[*].comment..text
+        regex_pattern: *jira_secret_regex
     - route: "GET /rest/agile/1.0/board/{boardId}/sprint"
     - route: "GET /rest/api/3/users/search"
     - route: "GET /rest/api/3/group/bulk"
@@ -40,4 +180,5 @@ source:
     - route: "GET /rest/api/3/status"
     - route: "GET /rest/api/3/statuscategory"
     - route: "GET /rest/dev-status/1.0/issue/detail"
+{%- endif %}
 

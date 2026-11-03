@@ -1,11 +1,12 @@
+# Base stack: Guardette plus Presidio Analyzer and Anonymizer. This file alone is what gets
+# imported to Azure Container Apps; compose.override.yml adds local-only settings.
 services:
   guardette:
-    build: .
+    image: ${GUARDETTE_IMAGE:-guardette:local}
     ports:
       - "8000:8000"
-    volumes:
-      - ./.guardette/policy.yml:/app/config/policy.yml:ro
     environment:
+      - GUARDETTE_POLICY_PATH=/app/config/policy.yml
       - CLIENT_SECRET=${CLIENT_SECRET}
       - PSEUDONYMIZE_ALGORITHM=${PSEUDONYMIZE_ALGORITHM:-sha256}
       - PSEUDONYMIZE_SALT=${PSEUDONYMIZE_SALT:-}
@@ -14,6 +15,43 @@ services:
       - PROXY_CLIENT_TIMEOUT_SECS=${PROXY_CLIENT_TIMEOUT_SECS:-60}
       - SECRET_MANAGER_CACHE_TTL_SECS=${SECRET_MANAGER_CACHE_TTL_SECS:-120}
       - PSEUDONYMIZE_EMAIL_DOMAINS_ALLOWLIST=${PSEUDONYMIZE_EMAIL_DOMAINS_ALLOWLIST:-}
-    env_file:
-      - path: .env
-        required: false
+      # Fixed, not interpolated, so a local .env cannot point the stack outside it.
+      - PRESIDIO_ANALYZER_URL=http://presidio-analyzer:3000
+      - PRESIDIO_ANONYMIZER_URL=http://presidio-anonymizer:3000
+      - PRESIDIO_LANGUAGE=${PRESIDIO_LANGUAGE:-en}
+      - PRESIDIO_SCORE_THRESHOLD=${PRESIDIO_SCORE_THRESHOLD:-0.5}
+      - PRESIDIO_TIMEOUT_SECS=${PRESIDIO_TIMEOUT_SECS:-10}
+      - PRESIDIO_FAIL_MODE=${PRESIDIO_FAIL_MODE:-closed}
+      - PRESIDIO_PLACEHOLDER=${PRESIDIO_PLACEHOLDER:-token}
+      - PRESIDIO_IGNORE_ENTITIES=${PRESIDIO_IGNORE_ENTITIES-PERSON,URL,US_DRIVER_LICENSE,MEDICAL_LICENSE,LOCATION,DATE_TIME}
+      - PRESIDIO_MAX_CONCURRENCY=${PRESIDIO_MAX_CONCURRENCY:-8}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/_guardette/ready')"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+    depends_on:
+      presidio-analyzer:
+        condition: service_healthy
+      presidio-anonymizer:
+        condition: service_healthy
+
+  presidio-analyzer:
+    image: ghcr.io/data-privacy-stack/presidio-analyzer:2.2.366@sha256:036d2f9b3c274fb36497383acef8f2d5aea528a014801c2c3040fb067990c79c
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3000/health')"]
+      interval: 15s
+      timeout: 5s
+      start_period: 120s
+
+  presidio-anonymizer:
+    image: ghcr.io/data-privacy-stack/presidio-anonymizer:2.2.366@sha256:b4d9ec900135c694b84353e03e1abd5127ccdfcd916d32db73002c28f0eaddc7
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3000/health')"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s

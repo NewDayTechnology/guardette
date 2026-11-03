@@ -62,6 +62,12 @@ class MetricsRecorder:
 
         self._record("guardette_auth_failures_total", 1, {"failure_class": failure_class})
 
+    def record_presidio(self, outcome: str) -> None:
+        if not self._config.metrics_active:
+            return
+
+        self._record("guardette_presidio_requests_total", 1, {"outcome": outcome})
+
     def _record(self, metric: str, value: float, attributes: dict[str, str]) -> None:
         self._event_logger.emit(
             "guardette.metric",

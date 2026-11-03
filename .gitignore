@@ -126,6 +126,8 @@ celerybeat.pid
 
 # Environments
 .env
+.env.*
+!.env.example
 .venv
 env/
 venv/
@@ -201,6 +203,15 @@ override.tf.json
 .terraformrc
 terraform.rc
 
-# Guardette specific
+# Guardette specific: generated policy, Jira response dumps and per-deployment
+# policygen config (domains, organisation keywords)
 .guardette/
 **/policygen.config.json
+
+# Local-only notes, test data and credentials
+local_ignore/
+
+# Editor settings: only the shared VS Code settings are committed
+.vscode/*
+!.vscode/settings.json
+.idea/

@@ -34,7 +34,7 @@ class ObservabilityMiddleware(BaseHTTPMiddleware):
         self._record_request(request, request_id, response.status_code, duration_seconds, response=response)
         return response
 
-    def _record_request(
+    def _record_request(  # noqa: PLR0917
         self,
         request: Request,
         request_id: str,

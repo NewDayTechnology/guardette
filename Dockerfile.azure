@@ -1,0 +1,4 @@
+# Azure image: the Guardette image with the generated policy built in (no bind mount on Container Apps).
+ARG BASE_IMAGE=guardette:azure-base
+FROM ${BASE_IMAGE}
+COPY .guardette/policy.yml /app/config/policy.yml

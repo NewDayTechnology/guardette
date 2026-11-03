@@ -1,18 +1,16 @@
 FROM python:3.13-slim
 
-RUN pip install poetry
-
 WORKDIR /app
 
+COPY pyproject.toml /app/
 COPY ./src/guardette /app/src/guardette
-COPY pyproject.toml poetry.lock /app/
-RUN poetry install --only main
+RUN pip install --no-cache-dir .
 
 COPY main.py /app/
 
 ENV GUARDETTE_POLICY_PATH=/app/config/policy.yml
-ENV HOST=0.0.0.0
 ENV PORT=8000
 
-EXPOSE ${PORT}
-CMD poetry run uvicorn main:app --host ${HOST} --port ${PORT}
+EXPOSE 8000
+# exec so uvicorn is PID 1 and receives SIGTERM for a graceful shutdown.
+CMD ["sh", "-c", "exec uvicorn main:app --host 0.0.0.0 --port ${PORT}"]

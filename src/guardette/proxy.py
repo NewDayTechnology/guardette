@@ -2,6 +2,7 @@ import functools
 import logging
 import time
 import uuid
+from contextlib import asynccontextmanager
 from secrets import compare_digest
 
 import httpx
@@ -26,7 +27,9 @@ from guardette.exceptions import (
 )
 from guardette.matching import Matcher, SourceMatcherResult
 from guardette.observability import configure_observability
+from guardette.observability.events import MetricsRecorder
 from guardette.policy import Policy
+from guardette.presidio import aclose_shared_client, presidio_ready
 from guardette.secrets import (
     AwsSecretsManager,
     ConfigSecretsManager,
@@ -208,6 +211,7 @@ class Guardette:
             config=self.config,
             secrets=self.secrets,
             match=match,
+            metrics=getattr(getattr(request.app.state, "observability", None), "metrics", None),
         )
         try:
             proxy_request = await proxy_transformer.transform_request(request)
@@ -290,6 +294,14 @@ class Guardette:
     def auth_handler(self, *args, **kwargs):
         return self.auth.register(*args, **kwargs)
 
+    def _policy_uses_presidio(self) -> bool:
+        return any(
+            action.__class__.__name__ == "PresidioAnonymize"
+            for source in self.policy.sources
+            for rule in source.rules
+            for action in rule.actions
+        )
+
     def to_fastapi(self, app: FastAPI):
         configure_observability(app)
         if not self._policy_load_logged:
@@ -301,11 +313,33 @@ class Guardette:
                 },
             )
             self._policy_load_logged = True
+
+        inner_lifespan = app.router.lifespan_context
+
+        @asynccontextmanager
+        async def lifespan(app_):
+            async with inner_lifespan(app_) as state:
+                yield state
+            await aclose_shared_client()
+
+        app.router.lifespan_context = lifespan
+
+        # Registered before the catch-all so they are never proxied upstream; no client secret needed.
+        app.api_route("/_guardette/health", methods=["GET"])(self._health_route)
+        app.api_route("/_guardette/ready", methods=["GET"])(self._ready_route)
         app.api_route("/_guardette/meta", methods=["GET"])(self._meta_route)
         app.api_route(
             "/{path:path}",
             methods=["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "PATCH"],
         )(self._proxy_route)
+
+    async def _health_route(self):
+        return JSONResponse(content={"status": "ok"}, status_code=200)
+
+    async def _ready_route(self):
+        if self._policy_uses_presidio() and not await presidio_ready(self.config):
+            return JSONResponse(content={"status": "unavailable", "reason": "presidio"}, status_code=503)
+        return JSONResponse(content={"status": "ready"}, status_code=200)
 
 
 def _record_auth_failure(request: Request, failure_class: str = "client") -> None:
@@ -331,10 +365,12 @@ class ProxyTransformer:
         config: ConfigManager,
         secrets: SecretsManager,
         match: SourceMatcherResult,
+        metrics: MetricsRecorder | None = None,
     ):
         self.auth = auth
         self.config = config
         self.secrets = secrets
+        self.metrics = metrics
         self.target = match["target"]
         self.rule = match["rule"]
         self.path_params = match["path_params"]
@@ -384,6 +420,7 @@ class ProxyTransformer:
                 headers=MutableHeaders(),
                 json_data=None,
             ),
+            metrics=self.metrics,
         )
         logger.debug(
             "Transforming request",
@@ -420,6 +457,7 @@ class ProxyTransformer:
                 headers=headers,
                 json_data=json_data,
             ),
+            metrics=self.metrics,
         )
         logger.debug(
             "Transforming response",

@@ -1,5 +1,6 @@
 import guardette.default_actions.filter_regex
 import guardette.default_actions.nullify
+import guardette.default_actions.presidio_anonymize
 import guardette.default_actions.pseudonymize_email
 import guardette.default_actions.redact
 import guardette.default_actions.redact_regex

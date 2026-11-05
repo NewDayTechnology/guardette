@@ -83,3 +83,51 @@ async def test_issue_routes_do_not_leak_versioned_representations(render_policy,
             await action.response(action_context)
 
         assert SECRET not in json.dumps(action_context.response.json_data), rule.route
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("kind", KINDS)
+async def test_issue_routes_redact_secrets_in_unlisted_custom_fields(render_policy, kind, action_context, monkeypatch):
+    monkeypatch.setattr(
+        "guardette.default_actions.presidio_anonymize.get_shared_client",
+        lambda _config: httpx.AsyncClient(transport=httpx.MockTransport(_presidio_no_entities)),
+    )
+    _, policy, _ = _render(render_policy, kind, include_extended_routes=True)
+    card = "4111-1111-1111-1111"
+    custom = {
+        "customfield_99999": {
+            "type": "doc",
+            "content": [
+                {
+                    "type": "paragraph",
+                    "content": [
+                        {"type": "text", "text": f"card {card}"},
+                        {"type": "hardBreak"},
+                        {"type": "text", "text": SECRET},
+                    ],
+                }
+            ],
+        },
+        "customfield_88888": f"plain {SECRET}",
+    }
+    issue_rules = [
+        rule
+        for source in policy.sources
+        for rule in source.rules
+        if rule.route.endswith(("/issue/{issueIdOrKey}", "/api/3/search", "/search/jql"))
+    ]
+
+    for rule in issue_rules:
+        issue = {
+            "key": "SA-1",
+            "fields": copy.deepcopy(custom),
+            "renderedFields": {"customfield_99999": f"<p>card {card}</p>"},
+        }
+        single = rule.route.endswith("/issue/{issueIdOrKey}")
+        action_context.response.json_data = issue if single else {"issues": [issue]}
+        for action in rule.actions:
+            await action.response(action_context)
+
+        body = json.dumps(action_context.response.json_data)
+        assert SECRET not in body and card not in body, rule.route
+        assert '"key": "SA-1"' in body

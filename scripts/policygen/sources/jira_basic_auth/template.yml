@@ -27,17 +27,8 @@ source:
         - $.fields.worklog.worklogs[*].comment
       - kind: redact_regex
         json_paths:
-        - $..summary
-        - $..description
-        - $.fields.comment.comments[*].body
-        - $.renderedFields.comment.comments[*].body
-        - $.fields.worklog.worklogs[*].comment
-        - $.renderedFields.worklog.worklogs[*].comment
-        - '$.changelog.histories[*].items[*].fromString'
-        - '$.changelog.histories[*].items[*].toString'
-        - $.fields.description..text
-        - $.fields.comment.comments[*].body..text
-        - $.fields.worklog.worklogs[*].comment..text
+        # Every string value, so custom and unseen fields (e.g. Acceptance Criteria) are covered; non-strings are skipped.
+        - $..*
         # Verbose regex (x flag): whitespace is ignored and `#` starts a comment, so
         # literal spaces and hashes are escaped (`\ `, `\#`). Reused below via *jira_secret_regex.
         # Organisation-specific keywords come from "redact_keyword_patterns" (a list of regex
@@ -87,17 +78,7 @@ source:
         - $.issues[*].fields.worklog.worklogs[*].comment
       - kind: redact_regex
         json_paths:
-        - $..summary
-        - $..description
-        - $.issues[*].fields.comment.comments[*].body
-        - $.issues[*].renderedFields.comment.comments[*].body
-        - $.issues[*].fields.worklog.worklogs[*].comment
-        - $.issues[*].renderedFields.worklog.worklogs[*].comment
-        - '$.issues[*].changelog.histories[*].items[*].fromString'
-        - '$.issues[*].changelog.histories[*].items[*].toString'
-        - $.issues[*].fields.description..text
-        - $.issues[*].fields.comment.comments[*].body..text
-        - $.issues[*].fields.worklog.worklogs[*].comment..text
+        - $..*
         regex_pattern: *jira_secret_regex
     # --- Migration of removed GET /rest/api/3/search (Atlassian CHANGE-2046) ---
     # Same response shape as the old search route (issues[*] wrapper). Actions
@@ -124,17 +105,7 @@ source:
         - $.issues[*].fields.worklog.worklogs[*].comment
       - kind: redact_regex
         json_paths:
-        - $..summary
-        - $..description
-        - $.issues[*].fields.comment.comments[*].body
-        - $.issues[*].renderedFields.comment.comments[*].body
-        - $.issues[*].fields.worklog.worklogs[*].comment
-        - $.issues[*].renderedFields.worklog.worklogs[*].comment
-        - '$.issues[*].changelog.histories[*].items[*].fromString'
-        - '$.issues[*].changelog.histories[*].items[*].toString'
-        - $.issues[*].fields.description..text
-        - $.issues[*].fields.comment.comments[*].body..text
-        - $.issues[*].fields.worklog.worklogs[*].comment..text
+        - $..*
         regex_pattern: *jira_secret_regex
     - route: "GET /rest/agile/1.0/board"
     - route: "GET /rest/agile/1.0/board/{boardId}/issue"
@@ -158,17 +129,7 @@ source:
         - $.issues[*].fields.worklog.worklogs[*].comment
       - kind: redact_regex
         json_paths:
-        - $..summary
-        - $..description
-        - $.issues[*].fields.comment.comments[*].body
-        - $.issues[*].renderedFields.comment.comments[*].body
-        - $.issues[*].fields.worklog.worklogs[*].comment
-        - $.issues[*].renderedFields.worklog.worklogs[*].comment
-        - '$.issues[*].changelog.histories[*].items[*].fromString'
-        - '$.issues[*].changelog.histories[*].items[*].toString'
-        - $.issues[*].fields.description..text
-        - $.issues[*].fields.comment.comments[*].body..text
-        - $.issues[*].fields.worklog.worklogs[*].comment..text
+        - $..*
         regex_pattern: *jira_secret_regex
     - route: "GET /rest/agile/1.0/board/{boardId}/sprint"
     - route: "GET /rest/api/3/users/search"
